@@ -12,9 +12,6 @@
 #include "VL53L5CX_I2C_DRIVER/platform.h"
 #include "VL53L5CX_I2C_DRIVER/platform.c"
 
-#include <Eigen/Core>
-#include <Eigen/Geometry>
-
 using namespace std;
 // ::::::::::::::::::::: Parameters ::::::::::::::::::::::::
 char * DEVICE_PATH = "/dev/i2c-5";

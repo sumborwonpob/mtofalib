@@ -23,7 +23,6 @@ find_package(rosidl_default_generators REQUIRED)
 #######################################################################
 find_package(rosidl_default_generators REQUIRED)
 find_package(std_msgs REQUIRED)
-find_package(Eigen3 REQUIRED)
 
 rosidl_generate_interfaces(${PROJECT_NAME}
   "msg/Mtof.msg"
@@ -42,7 +41,6 @@ include_directories(
 )
 
 set(LIBS  
-  ${EIGEN3_LIBS}
 )
 
 #######################################################################
