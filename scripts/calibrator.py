@@ -47,7 +47,7 @@ PHI_WH = 0.785398 # FOV of MToF in rad 45 deg = 0.785398 rad
 NEED_FLIP_HORIZONTAL = False # Horizontal flip is performed before rotation
 NEED_FLIP_VERTICAL = True # Vertical flip is performed before rotation
 NEED_ROTATE = 0 # 0 = No rotation, 1-3 integer for number of times to rotate CCW
-# ::::::::::::::::::::: ROS-related Params :::::::::::::::::::::
+# ::::::::::::::::::::: ROS-related Params ::::::::::::::::::::::
 IMAGE_COMPRESSED = True
 IMAGE_TOPIC = "/camera/compressed"
 MTOF_TOPIC = "/mtof/data"
