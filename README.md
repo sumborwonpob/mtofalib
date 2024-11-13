@@ -1,11 +1,13 @@
 # mtofalib
-ROS2 Package for 3D-2D correspendance orientation calibration of Multi-zone ToF distance sensor (mtof) and a Monocular Camera.
+ROS2 Package for 3D-2D correspendance orientation calibration of a Multi-zone ToF distance sensor (mtof) and a Monocular Camera.
 
 ## Method
 
-A low-cost multi-zone time-of-flight distance sensor, such as VL53L5CX or VL53L8CX, has a very limited resolution of up to 8x8 pixels. Which made it very difficult to accurately estimate the relative pose when used in conjunction with a monocular camera. Existing calibration methods for pattern-based depth cameras or time-of-flight depth cameras are not applicable for such a low resolution. By attaching the sensor to a camera, slight orientation misalignment of the mtof sensor and the camera is unavoidable and leads to significant misalignment in 3D-2D projection of the mtof zone centers in the image.
+A low-cost multi-zone time-of-flight distance sensor, such as VL53L5CX or VL53L8CX, has a very limited resolution of up to 8x8 pixels. Which made it very difficult to accurately estimate the relative pose when used in conjunction with a monocular camera.  By attaching the sensor to a camera, slight orientation misalignment of the mtof sensor and the camera is unavoidable and leads to significant misalignment in 3D-2D projection of the mtof zone centers in the image.
 
-This calibration method exploits a calibration target with a specific shape but easy to replicate with basic materials such as cardboard boxes and a paper-printed AR markers. The angle calibration is calculated from 3D-2D correspondence between the pose of the board in the image estimated by AR markers and the pose of the board estimated from depth data acquired from mtof.
+Existing calibration methods for pattern-based depth cameras or time-of-flight depth cameras are not applicable for such a low resolution. An alternative approach is to use a second global shutter NIR/IR camera with high FPS to directly detect the mtof's emitted infrared light and find it's homography in the target camera. However, it requires an additional camera and also require additional extrinsic calibration between the targeted camera and the said camera. The position offset of the two cameras also results in some degree of 3D-2D coressondance error.
+
+This calibration method exploits a calibration target with a specific shape but easy to replicate using basic materials such as cardboard boxes and a paper-printed AR markers. The angle calibration is calculated from 3D-2D correspondence between the pose of the board in the image estimated by AR markers and the pose of the board estimated from depth data acquired from mtof.
 
 ## Calibration target
 
@@ -13,6 +15,7 @@ The calibration pattern can be downloaded in [docs/calibration_pattern.pdf](http
 <img src="docs/calibration_pattern.png" />
 
 The dimensions of the calibration target is printed on an A4 paper and attached to a cardboard box as shown in the image. A square hole is cut in the middle of the calibration target. The square hole is used during pitch/yaw calibration step.
+The size of the square hole is 12cm, the reason is to make the hole big enough for the mtof to clearly detect it in the depth image. You can experiment with various hole size which works best for your sensor.
 <img src="docs/pitchyaw_calib_target.png" />
 
 The square hole is covered up by another cardboard sheet during roll calibration step.
@@ -21,6 +24,8 @@ The square hole is covered up by another cardboard sheet during roll calibration
 ## Installation and dependencies
 
 Tested environment: Ubuntu 22.04, ROS 2 Humble Desktop, and OpenCV 4.5.4
+
+Tested sensors: VL53L5CX and VL53L8CX
 ```
 # Required for debug image publisher
 sudo apt-get install ros-humble-compressed-image-transport
@@ -33,15 +38,15 @@ This package also provides a ROS2 interface that publishes VL53L5CX multi-zone d
 
 ## Usage
 
-Be sure to attach the mtof as close as possible to the camera centre. The recommended distance is less than 2cm from the camera sensor centre.
+Be sure to attach the mtof as close as possible to the camera center. The recommended distance is less than 2cm from the camera sensor centre.
 
-Adjust all the necessary parameters in the [calibrator.py](https://github.com/sumborwonpob/mtofalib/blob/main/scripts/calibrator.py) and do concol build to update the parameters. Then:
+Adjust all the necessary parameters in the [calibrator.py](https://github.com/sumborwonpob/mtofalib/blob/main/scripts/calibrator.py) and do colcon build to update the parameters. Then:
 
 ```
 ros2 run mtofalib mtof_publisher
 ros2 run mtofalib calibrator.py
 ```
-Open rqt image visualizer and subscribe to two compressed image topics
+Open rqt image visualizer and subscribe to two compressed image topics to view the calibration image
 ```
 /mtofal/debug/depth/compressed
 /mtofal/debug/aruco/compressed
@@ -56,6 +61,6 @@ Try such that the left and right edge of the calibration target is not seen in t
 
 ### Pitch/Yaw calibration
 
-Open up the square hole in the calibration target. Try to include the whole square hole in the mtof depth image. Try to hold the target close to the mtof and the camera such that outer edge does not reflect in the mtof depth image. Since the hole center in the depth image is calculated from clustering, if the whole hole is not in the depth frame, or if the area behind the outer edge of the target is seen, the center of mass calculation may be inaccurate.
+Open up the square hole in the calibration target. Try to include the whole square hole in the mtof depth image. Try to hold the target close to the mtof and the camera such that outer edge does not reflect in the mtof depth image. Since the hole center in the depth image is calculated from clustering, if the whole hole is not in the depth frame, or if the area behind the outer edge of the target is seen in the depth image, the center of mass calculation may be inaccurate.
 
 ![](./docs/pitchyaw_calib_vid.gif)
