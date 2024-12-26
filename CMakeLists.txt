@@ -65,6 +65,7 @@ DESTINATION lib/${PROJECT_NAME}
 # Install Python executables
 install(PROGRAMS
   scripts/calibrator.py
+  scripts/uvc_publisher.py
   DESTINATION lib/${PROJECT_NAME}
 )
 
