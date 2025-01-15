@@ -38,15 +38,20 @@ NEW_WIDTH = 1280 # In case you want to resize the image
 NEW_HEIGHT = 720 # In case you want to resize the image
 # Camera intrinsics (of the original image size)
 # Camera matrix (does not support skew by default. If you need it, apply yourself)
-Kmat = np.array([[504.98910672340946, 0.0, 629.8239641205832], [0.0, 506.32538446501604, 386.57607630506993], [0.0, 0.0, 1.0]])
+Kmat = np.array([
+    [588.985878, 0.000000, 640.660494],
+    [0.000000, 597.650950, 361.873006],
+    [0.000000, 0.000000, 1.000000]
+])
 # Distortion matrix: Pinhole [k1 k2 p1 p2 k3], Fisheye [k1 k2 k3 k4]
-Dmodel = "fisheye" # pinhole or fisheye
-Dmat = np.array([[-0.09530407046832189], [0.06061897620514853], [-0.04570676901823003], [0.015049902686400237]])
+Dmodel = "pinhole" # pinhole or fisheye
+Dmat = np.array([-0.257084, 0.037809, 0.002464, -0.000984, 0.000000])
 # ::::::::::::::::::::: MToF Params :::::::::::::::::::::
-T_C_MTOF = np.array([-0.045, 0.0, -0.02]) # MToF's position in the camera's coordinate frame in meters (X right, Y down, Z front)
+T_C_MTOF = np.array([-0.025, 0.0, -0.02]) # MToF's position in the camera's coordinate frame in meters (X right, Y down, Z front)
 VIS_DEPTH_IMAGE_SIZE = 400 # How big debug depth image in pixels (for debugging and for centroid calculation)
-PHI_WH = 45 * 3.1417/180 # FOV of MToF in rad 45 deg = 0.785398 rad
+PHI_WH = 45 * 3.14159265359/180 # FOV of MToF in deg (converrted to rad) VL53L5CX/VL53L8CX = 45 deg
 NEED_ROTATE = 1 # 0 = No rotation, 1-3 integer for number of times to rotate CW
+# Target is to aim for the depth image to arrange from top-left to bottom-right, same as image pixel arrangement
 # ::::::::::::::::::::: ROS-related Params ::::::::::::::::::::::
 IMAGE_COMPRESSED = True
 IMAGE_TOPIC = "/camera/compressed"
@@ -114,16 +119,8 @@ class Mtofal(Node):
     image_ts_array = []
     image_center_array = []
     z_array = []
-    obj_point_array = []
-    image_roll_array = []
-    depth_roll_array = []
     hole_time = None
     hole_center = None
-    board_center = None
-    void_center = None
-    roll_offset = 0.0
-    pitch_offset = 0.0
-    yaw_offset = 0.0
     undist_imgPoints = None
 
     # :::::::::::::::::::::: Calib result :::::::::::::::::::::::::::
@@ -165,7 +162,14 @@ class Mtofal(Node):
         self.Kmat_new = Kmat
 
         # ----------- Calculate undist map ------------------
-        self.rectmap1, self.rectmap2 = cv2.fisheye.initUndistortRectifyMap(Kmat, Dmat, None, Kmat, (NEW_WIDTH,NEW_HEIGHT), cv2.CV_32FC1)
+        if(Dmodel != "fisheye" and Dmodel != "pinhole"):
+            print("Not supported distortion model: ", Dmodel)
+            print("Use either fisheye or pinhole model")
+            exit()
+        if(Dmodel == "pinhole"):
+            self.rectmap1, self.rectmap2 = cv2.initUndistortRectifyMap(Kmat, Dmat, None, Kmat, (NEW_WIDTH,NEW_HEIGHT), cv2.CV_32FC1)
+        if(Dmodel == "fisheye"):
+            self.rectmap1, self.rectmap2 = cv2.fisheye.initUndistortRectifyMap(Kmat, Dmat, None, Kmat, (NEW_WIDTH,NEW_HEIGHT), cv2.CV_32FC1)
 
         #-------------- Calculate display font scale -----------
         self.font_scale = NEW_WIDTH/640
@@ -175,6 +179,11 @@ class Mtofal(Node):
         print("::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::")
         print("::::::::::::::::::::::::: Mtofalib :::::::::::::::::::::::::")
         print("::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::")
+
+        # ---------- Print Calib Info ------------------
+        print("Distortion Model: ", Dmodel)
+        print("Camera matrix: ", Kmat)
+        print("Distortion matrix: ", Dmat)
         user_input = input("Type something and press enter when ready: ") # Type something, doesn't matter. It will go even if you say no.
         if(user_input == "something"):
             print("Haha. Very funny.")
@@ -191,7 +200,6 @@ class Mtofal(Node):
         # detect Aruco in the image
         corners, ids, rejectedImgPoints = cv2.aruco.detectMarkers(frame, self.dictionary)
         frame_debug = cv2.cvtColor(frame, cv2.COLOR_GRAY2BGR)
-        # frame_debug = cv2.fisheye.undistortImage(frame_debug, self.Kmat_new, Dmat, Knew=self.Kmat_new)
         frame_debug = cv2.remap(frame_debug, self.rectmap1, self.rectmap2, cv2.INTER_NEAREST)
 
 
@@ -224,20 +232,25 @@ class Mtofal(Node):
                 cv2.drawFrameAxes(frame_debug, self.Kmat_new, Dmat, rvec, tvec, 0.06)
 
                 # Project the rest of the board that is not inside the image
-                imgePointsProjected, jacobian_ = cv2.fisheye.projectPoints(np.array(object_points).reshape(len(object_points), 1, 3), rvec, tvec, self.Kmat_new, Dmat)
-                undistortedNormVec = cv2.fisheye.undistortPoints(imgePointsProjected, self.Kmat_new, Dmat)
-                imgePointsProjected = cv2.fisheye.undistortPoints(imgePointsProjected, self.Kmat_new, Dmat, None, self.Kmat_new)
+                if(Dmodel == "pinhole"):
+                    self.imgePointsProjected, jacobian_ = cv2.projectPoints(np.array(object_points).reshape(len(object_points), 1, 3), rvec, tvec, self.Kmat_new, Dmat)
+                    self.undistortedNormVec = cv2.undistortPoints(self.imgePointsProjected, self.Kmat_new, Dmat)
+                    self.imgePointsProjected = cv2.undistortPoints(self.imgePointsProjected, self.Kmat_new, Dmat, None, self.Kmat_new)
+                if(Dmodel == "fisheye"):
+                    self.imgePointsProjected, jacobian_ = cv2.fisheye.projectPoints(np.array(object_points).reshape(len(object_points), 1, 3), rvec, tvec, self.Kmat_new, Dmat)
+                    self.undistortedNormVec = cv2.fisheye.undistortPoints(self.imgePointsProjected, self.Kmat_new, Dmat)
+                    self.imgePointsProjected = cv2.fisheye.undistortPoints(self.imgePointsProjected, self.Kmat_new, Dmat, None, self.Kmat_new)
 
                 # Draw debug
-                for i in range(imgePointsProjected.shape[0]):
+                for i in range(self.imgePointsProjected.shape[0]):
                     if(i == 0 or i == 4):
                         marker_type = cv2.MARKER_TRIANGLE_UP
-                        cv2.drawMarker(frame_debug, (int(imgePointsProjected[i][0][0]), int(imgePointsProjected[i][0][1])), (0, 0, 255), marker_type, int(20*self.font_scale))
+                        cv2.drawMarker(frame_debug, (int(self.imgePointsProjected[i][0][0]), int(self.imgePointsProjected[i][0][1])), (0, 0, 255), marker_type, int(20*self.font_scale))
                     if(i == 8 or i == 12):
                         marker_type = cv2.MARKER_TRIANGLE_DOWN
-                        cv2.drawMarker(frame_debug, (int(imgePointsProjected[i][0][0]), int(imgePointsProjected[i][0][1])), (0, 0, 255), marker_type, int(20*self.font_scale))
-                    cv2.drawMarker(frame_debug, (int(imgePointsProjected[i][0][0]), int(imgePointsProjected[i][0][1])), (0, 255, 0), cv2.MARKER_SQUARE, int(15*self.font_scale))
-                cv2.line(frame_debug, (int(Kmat[0][2]), int(Kmat[1][2])), ((int(imgePointsProjected[16][0][0]), int(imgePointsProjected[16][0][1]))), (255, 0, 255), int(2*self.font_scale))
+                        cv2.drawMarker(frame_debug, (int(self.imgePointsProjected[i][0][0]), int(self.imgePointsProjected[i][0][1])), (0, 0, 255), marker_type, int(20*self.font_scale))
+                    cv2.drawMarker(frame_debug, (int(self.imgePointsProjected[i][0][0]), int(self.imgePointsProjected[i][0][1])), (0, 255, 0), cv2.MARKER_SQUARE, int(15*self.font_scale))
+                cv2.line(frame_debug, (int(Kmat[0][2]), int(Kmat[1][2])), ((int(self.imgePointsProjected[16][0][0]), int(self.imgePointsProjected[16][0][1]))), (255, 0, 255), int(2*self.font_scale))
                 cv2.putText(frame_debug, "%.2fm"%(tvec[2]), (int(NEW_WIDTH/2)-50,int(NEW_HEIGHT/2)-10),  cv2. FONT_HERSHEY_PLAIN, 2*self.font_scale, (0, 255, 0), int(3*self.font_scale), cv2.LINE_AA)
                 
 
@@ -247,14 +260,21 @@ class Mtofal(Node):
                     # Calculate 3D position from MToF
                     mtof_aziele = R.from_euler("xyz",[-self.hole_center[1], self.hole_center[0], 0.0], degrees=False)
                     hole_point3d = mtof_aziele.apply(np.array([0.0, 0.0, tvec[2,0]]))
-                    # Project that 3D point into image frame with provided relative position and zero rotation
-                    hole_imgpoint, hole_jacobian = cv2.fisheye.projectPoints(np.array([hole_point3d]).reshape(1,1,3), np.array([0.0, 0.0, 0.0]), T_C_MTOF, self.Kmat_new, Dmat)
-                    # Convert to normalized 2D vector
-                    hole_imgpoint_undist = cv2.fisheye.undistortPoints(np.array(hole_imgpoint).reshape(1,1,2), self.Kmat_new, Dmat)[0][0]
+
+                    if(Dmodel == "pinhole"):
+                        # Project that 3D point into image frame with provided relative position and zero rotation
+                        self.hole_imgpoint, hole_jacobian = cv2.projectPoints(np.array([hole_point3d]).reshape(1,1,3), np.array([0.0, 0.0, 0.0]), T_C_MTOF, self.Kmat_new, Dmat)
+                        # Convert to normalized 2D vector
+                        self.hole_imgpoint_undist = cv2.undistortPoints(np.array(self.hole_imgpoint).reshape(1,1,2), self.Kmat_new, Dmat)[0][0]
+                    if(Dmodel == "fisheye"):
+                        # Project that 3D point into image frame with provided relative position and zero rotation
+                        self.hole_imgpoint, hole_jacobian = cv2.fisheye.projectPoints(np.array([hole_point3d]).reshape(1,1,3), np.array([0.0, 0.0, 0.0]), T_C_MTOF, self.Kmat_new, Dmat)
+                        # Convert to normalized 2D vector
+                        self.hole_imgpoint_undist = cv2.fisheye.undistortPoints(np.array(self.hole_imgpoint).reshape(1,1,2), self.Kmat_new, Dmat)[0][0]
 
                     # Convert 2D vector to 3D vector by adding constant z=1 and nromalize the vector
-                    image_vec = np.array([undistortedNormVec[16][0][0], undistortedNormVec[16][0][1], 1])
-                    mtof_vec = np.array([hole_imgpoint_undist[0], hole_imgpoint_undist[1], 1])
+                    image_vec = np.array([self.undistortedNormVec[16][0][0], self.undistortedNormVec[16][0][1], 1])
+                    mtof_vec = np.array([self.hole_imgpoint_undist[0], self.hole_imgpoint_undist[1], 1])
                     image_vec = image_vec/np.linalg.norm(image_vec)
                     mtof_vec = mtof_vec/np.linalg.norm(mtof_vec)
                     self.image_center_array.append(image_vec)
@@ -286,14 +306,18 @@ class Mtofal(Node):
                     zone_angle = R.from_euler("xyz", [elevation, azimuth, 0], degrees=False)
                     zone_point3d = zone_angle.apply(np.array([0.0, 0.0, distance]))
                     point3d_list.append(zone_point3d)
-                    
-            # Project those points to 2D frame using provided translation and calculated rotation
-            zone_imgpoint, hole_jacobian = cv2.fisheye.projectPoints(np.array([point3d_list]).reshape(1,64,3), self.result_rvec, T_C_MTOF, self.Kmat_new, Dmat)
-            zone_imgpoint_undist = cv2.fisheye.undistortPoints(np.array(zone_imgpoint).reshape(64,1,2), self.Kmat_new, Dmat, None, self.Kmat_new)
+            
+            if(Dmodel == "pinhole"):
+                self.zone_imgpoint, hole_jacobian = cv2.projectPoints(np.array([point3d_list]).reshape(1,64,3), self.result_rvec, T_C_MTOF, self.Kmat_new, Dmat)
+                self.zone_imgpoint_undist = cv2.undistortPoints(np.array(self.zone_imgpoint).reshape(64,1,2), self.Kmat_new, Dmat, None, self.Kmat_new)
+            if(Dmodel == "fisheye"):
+                # Project those points to 2D frame using provided translation and calculated rotation
+                self.zone_imgpoint, hole_jacobian = cv2.fisheye.projectPoints(np.array([point3d_list]).reshape(1,64,3), self.result_rvec, T_C_MTOF, self.Kmat_new, Dmat)
+                self.zone_imgpoint_undist = cv2.fisheye.undistortPoints(np.array(self.zone_imgpoint).reshape(64,1,2), self.Kmat_new, Dmat, None, self.Kmat_new)
 
             # Draw them
-            for i in range(len(zone_imgpoint_undist)):
-                imgpt = zone_imgpoint_undist[i][0]
+            for i in range(len(self.zone_imgpoint_undist)):
+                imgpt = self.zone_imgpoint_undist[i][0]
                 dist = self.depth_data[int(i/self.zone_res)][i%self.zone_res]
                 color = self.calculateColorMap(dist)
                 cv2.circle(frame_debug, (int(imgpt[0]), int(imgpt[1])), int(15*self.font_scale), color, int(2*self.font_scale))
@@ -404,7 +428,7 @@ class Mtofal(Node):
         depth_timestamp = np.array(self.depth_ts_array)
         image_timestamp = np.array(self.image_ts_array)
 
-        # Calculate Delay
+        # Calculate common time space and interpolate
         common_time = np.linspace(max(depth_timestamp[0], image_timestamp[0]), min(depth_timestamp[-1], image_timestamp[-1]), NUM_DATA_POINTS*2)
         depth_x_inter = interp1d(depth_timestamp, np.array(self.depth_center_array)[:,0], kind='linear', fill_value='extrapolate')(common_time) 
         img_x_inter = interp1d(image_timestamp, np.array(self.image_center_array)[:,0], kind='linear', fill_value='extrapolate')(common_time) 

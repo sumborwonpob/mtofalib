@@ -17,7 +17,10 @@ from cv_bridge import CvBridge
 from mtofalib.msg import Mtof
 bridge = CvBridge()
 
-# ::::::::::::::::: Put your parameters here :::::::::::::::::::::::::
+# :::::::::::::::::::::::: Put calibration result ::::::::::::::::::::
+R_C_MTOF = np.array([2.47845104, 0.22337276, 1.7083604 ]) * 3.14159265359 / 180  #As output from calibrator, then convert deg to rad
+
+# :::::::::::::::: Below just copy from calibrator :::::::::::::::::::
 # ::::::::::::::::::::: Camera Params :::::::::::::::::::::
 # Original image size
 IMAGE_WIDTH = 1280
@@ -36,9 +39,8 @@ IMAGE_TOPIC = "/camera/compressed"
 MTOF_TOPIC = "/mtof/data"
 # ::::::::::::::::::::: MToF Params :::::::::::::::::::::
 T_C_MTOF = np.array([-0.025, 0.0, -0.02]) # MToF's position in the camera's coordinate frame in meters (X right, Y down, Z front)
-R_C_MTOF = np.array([2.47845104, 0.22337276, 1.7083604 ]) * 3.1417 / 180  #convert deg to rad
 VIS_DEPTH_IMAGE_SIZE = 400 # How big debug depth image in pixels (for debugging and for centroid calculation)
-PHI_WH = 45 * 3.1417/180 # FOV of MToF in rad 45 deg = 0.785398 rad
+PHI_WH = 45 * 3.14159265359/180 # FOV of MToF in rad 45 deg = 0.785398 rad
 NEED_ROTATE = 1 # 0 = No rotation, 1-3 integer for number of times to rotate CW
 # ::::::::::::::::::::: ROS-related Params ::::::::::::::::::::::
 IMAGE_COMPRESSED = True
