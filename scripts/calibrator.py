@@ -32,33 +32,32 @@ print("Matplotlib version: ", matplotlib.__version__)
 # ::::::::::::::::::::: Camera Params :::::::::::::::::::::
 # Original image size
 IMAGE_WIDTH = 1280
-IMAGE_HEIGHT = 800
+IMAGE_HEIGHT = 720
 # New image size
 NEW_WIDTH = 1280 # In case you want to resize the image
-NEW_HEIGHT = 800 # In case you want to resize the image
+NEW_HEIGHT = 720 # In case you want to resize the image
 # Camera intrinsics (of the original image size)
 # Camera matrix (does not support skew by default. If you need it, apply yourself)
-Kmat = np.array([[497.17756530532347, 0.0, 630.0687626834599], [0.0, 497.83938338803733, 386.46553181529407], [0.0, 0.0, 1.0]])
+Kmat = np.array([[504.98910672340946, 0.0, 629.8239641205832], [0.0, 506.32538446501604, 386.57607630506993], [0.0, 0.0, 1.0]])
 # Distortion matrix: Pinhole [k1 k2 p1 p2 k3], Fisheye [k1 k2 k3 k4]
 Dmodel = "fisheye" # pinhole or fisheye
-Dmat = np.array([[-0.06090879252215075], [0.017015566724699678], [-0.007572310675681196], [-0.0005494543454422542]])
+Dmat = np.array([[-0.09530407046832189], [0.06061897620514853], [-0.04570676901823003], [0.015049902686400237]])
 # ::::::::::::::::::::: MToF Params :::::::::::::::::::::
-T_C_MTOF = np.array([-0.025, 0.0, 0.0]) # MToF's position in the camera's coordinate frame in meters (X right, Y down, Z front)
+T_C_MTOF = np.array([-0.045, 0.0, -0.02]) # MToF's position in the camera's coordinate frame in meters (X right, Y down, Z front)
 VIS_DEPTH_IMAGE_SIZE = 400 # How big debug depth image in pixels (for debugging and for centroid calculation)
-PHI_WH = 0.785398 # FOV of MToF in rad 45 deg = 0.785398 rad
-NEED_FLIP_HORIZONTAL = False # Horizontal flip is performed before rotation
-NEED_FLIP_VERTICAL = True # Vertical flip is performed before rotation
-NEED_ROTATE = 2 # 0 = No rotation, 1-3 integer for number of times to rotate CCW
+PHI_WH = 45 * 3.1417/180 # FOV of MToF in rad 45 deg = 0.785398 rad
+NEED_ROTATE = 1 # 0 = No rotation, 1-3 integer for number of times to rotate CW
 # ::::::::::::::::::::: ROS-related Params ::::::::::::::::::::::
 IMAGE_COMPRESSED = True
 IMAGE_TOPIC = "/camera/compressed"
 MTOF_TOPIC = "/mtof/data"
 # ::::::::::::::::::::: Visualization :::::::::::::::::::::
 # Depth TURBO color-map parameters
-VIS_MAX_RANGE = 0.7 # Range in meters which will be in color blue
+VIS_MAX_RANGE = 1.0 # Range in meters which will be in color blue
 VIS_MIN_RANGE = 0.1 # Range in meters which will be in Color red
 # ::::::::::::::::::::: Calib Params ::::::::::::
-NUM_DATA_POINTS = 300 # How many data should be collected for the calibration (recommeded more than 100 with sufficient movement)
+NUM_DATA_POINTS = 200 # How many data should be collected for the calibration (recommeded more than 100 with sufficient movement)
+BOARD_OR_HOLE = True # True = use board calib mode, False = use hole calib mode
 # ::::::::::::::::::::: Put the dimension of your calibration target ::::::::::::
 ARUCO_DICT = cv2.aruco.DICT_APRILTAG_16h5 # Change according to your calib target
 # See repo readme for details, unit in meters
@@ -132,6 +131,8 @@ class Mtofal(Node):
 
     # :::::::::::::::::::::: Camera Params :::::::::::::::::::::::::::::::
     Kmat_new = None
+    rectmap1 = None
+    rectmap2 = None
 
     # ::::::::::::::::::::::::::::::::::::::::::: CONSTRUCTOR :::::::::::::::::::::::::::::::::::::::::
     def __init__(self):
@@ -156,11 +157,15 @@ class Mtofal(Node):
         self.dictionary = cv2.aruco.Dictionary_get(ARUCO_DICT)
 
         # ------------ Calculate new Kmat -------------------
-        Kmat[0][0] = Kmat[0][0] * NEW_WIDTH / IMAGE_WIDTH
-        Kmat[0][2] = Kmat[0][2] * NEW_WIDTH / IMAGE_WIDTH
-        Kmat[1][1] = Kmat[1][1] * NEW_HEIGHT / IMAGE_HEIGHT
-        Kmat[1][2] = Kmat[1][2] * NEW_HEIGHT / IMAGE_HEIGHT
+        print(Kmat)
+        Kmat[0][0] = Kmat[0][0] * (NEW_WIDTH / IMAGE_WIDTH)
+        Kmat[0][2] = Kmat[0][2] * (NEW_WIDTH / IMAGE_WIDTH)
+        Kmat[1][1] = Kmat[1][1] * (NEW_HEIGHT / IMAGE_HEIGHT)
+        Kmat[1][2] = Kmat[1][2] * (NEW_HEIGHT / IMAGE_HEIGHT)
         self.Kmat_new = Kmat
+
+        # ----------- Calculate undist map ------------------
+        self.rectmap1, self.rectmap2 = cv2.fisheye.initUndistortRectifyMap(Kmat, Dmat, None, Kmat, (NEW_WIDTH,NEW_HEIGHT), cv2.CV_32FC1)
 
         #-------------- Calculate display font scale -----------
         self.font_scale = NEW_WIDTH/640
@@ -170,7 +175,9 @@ class Mtofal(Node):
         print("::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::")
         print("::::::::::::::::::::::::: Mtofalib :::::::::::::::::::::::::")
         print("::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::")
-        # input("Ready?: ") # Type something, doesn't matter. It will go even if you say no.
+        user_input = input("Type something and press enter when ready: ") # Type something, doesn't matter. It will go even if you say no.
+        if(user_input == "something"):
+            print("Haha. Very funny.")
 
     # ::::::::::::::::::::::::::::::::::: Image Callback ::::::::::::::::::::::::::::::::::::::
     def image_callback(self, msg):
@@ -184,7 +191,8 @@ class Mtofal(Node):
         # detect Aruco in the image
         corners, ids, rejectedImgPoints = cv2.aruco.detectMarkers(frame, self.dictionary)
         frame_debug = cv2.cvtColor(frame, cv2.COLOR_GRAY2BGR)
-        frame_debug = cv2.fisheye.undistortImage(frame_debug, self.Kmat_new, Dmat, Knew=self.Kmat_new)
+        # frame_debug = cv2.fisheye.undistortImage(frame_debug, self.Kmat_new, Dmat, Knew=self.Kmat_new)
+        frame_debug = cv2.remap(frame_debug, self.rectmap1, self.rectmap2, cv2.INTER_NEAREST)
 
 
         # --------------------------- Calibration Phrase ---------------------------------------------
@@ -194,11 +202,6 @@ class Mtofal(Node):
             imgPoints_now = []
             if(ids is not None and self.getting_data):
                 for i in range(len(ids)):
-                    # if(ids[i] == 11 or ids[i] == 13):
-                    #     marker_type = cv2.MARKER_TRIANGLE_UP
-                    # if(ids[i] == 12 or ids[i] == 14):
-                    #      marker_type = cv2.MARKER_TRIANGLE_DOWN
-                    #cv2.drawMarker(frame_debug, (int(corners[i][0][0][0]), int(corners[i][0][0][1])), (0, 0, 255), marker_type, 20)
                     if(ids[i] == 11):
                         objPtsIdxStart = 0
                     if(ids[i] == 12):
@@ -233,7 +236,7 @@ class Mtofal(Node):
                     if(i == 8 or i == 12):
                         marker_type = cv2.MARKER_TRIANGLE_DOWN
                         cv2.drawMarker(frame_debug, (int(imgePointsProjected[i][0][0]), int(imgePointsProjected[i][0][1])), (0, 0, 255), marker_type, int(20*self.font_scale))
-                    cv2.drawMarker(frame_debug, (int(imgePointsProjected[i][0][0]), int(imgePointsProjected[i][0][1])), (0, 255, 0), cv2.MARKER_SQUARE, int(5*self.font_scale))
+                    cv2.drawMarker(frame_debug, (int(imgePointsProjected[i][0][0]), int(imgePointsProjected[i][0][1])), (0, 255, 0), cv2.MARKER_SQUARE, int(15*self.font_scale))
                 cv2.line(frame_debug, (int(Kmat[0][2]), int(Kmat[1][2])), ((int(imgePointsProjected[16][0][0]), int(imgePointsProjected[16][0][1]))), (255, 0, 255), int(2*self.font_scale))
                 cv2.putText(frame_debug, "%.2fm"%(tvec[2]), (int(NEW_WIDTH/2)-50,int(NEW_HEIGHT/2)-10),  cv2. FONT_HERSHEY_PLAIN, 2*self.font_scale, (0, 255, 0), int(3*self.font_scale), cv2.LINE_AA)
                 
@@ -243,7 +246,6 @@ class Mtofal(Node):
                     # Project center point to the image using initially provided position
                     # Calculate 3D position from MToF
                     mtof_aziele = R.from_euler("xyz",[-self.hole_center[1], self.hole_center[0], 0.0], degrees=False)
-                    #hole_point3d = mtof_aziele.apply(np.array(tvec[:,0]))
                     hole_point3d = mtof_aziele.apply(np.array([0.0, 0.0, tvec[2,0]]))
                     # Project that 3D point into image frame with provided relative position and zero rotation
                     hole_imgpoint, hole_jacobian = cv2.fisheye.projectPoints(np.array([hole_point3d]).reshape(1,1,3), np.array([0.0, 0.0, 0.0]), T_C_MTOF, self.Kmat_new, Dmat)
@@ -275,27 +277,26 @@ class Mtofal(Node):
             col = 0
             row = 0
             point3d_list = []
-            for distances in self.depth_data:
-                for distance in distances:
+            for i in range(self.zone_res):
+                for j in range(self.zone_res):
+                    distance = self.depth_data[i][j]
                     # Start from top-left
-                    azimuth = -((col * angle_per_zone) - (PHI_WH/2) + (angle_per_zone/2))
-                    elevation = -((row * angle_per_zone) - (PHI_WH/2) + (angle_per_zone/2))
-                    zone_angle = R.from_euler("xy", [elevation, azimuth], degrees=False)
+                    azimuth = ((j * angle_per_zone) - (PHI_WH/2) + (angle_per_zone/2))
+                    elevation = -((i * angle_per_zone) - (PHI_WH/2) + (angle_per_zone/2))
+                    zone_angle = R.from_euler("xyz", [elevation, azimuth, 0], degrees=False)
                     zone_point3d = zone_angle.apply(np.array([0.0, 0.0, distance]))
                     point3d_list.append(zone_point3d)
-                    col+= 1
-                row += 1
-                col = 0
+                    
             # Project those points to 2D frame using provided translation and calculated rotation
-            zone_imgpoint, hole_jacobian = cv2.fisheye.projectPoints(np.array([point3d_list]).reshape(1,64,3), self.result_rvec, -1*T_C_MTOF, self.Kmat_new, Dmat)
+            zone_imgpoint, hole_jacobian = cv2.fisheye.projectPoints(np.array([point3d_list]).reshape(1,64,3), self.result_rvec, T_C_MTOF, self.Kmat_new, Dmat)
             zone_imgpoint_undist = cv2.fisheye.undistortPoints(np.array(zone_imgpoint).reshape(64,1,2), self.Kmat_new, Dmat, None, self.Kmat_new)
-            #print(zone_imgpoint_undist)
+
             # Draw them
             for i in range(len(zone_imgpoint_undist)):
                 imgpt = zone_imgpoint_undist[i][0]
                 dist = self.depth_data[int(i/self.zone_res)][i%self.zone_res]
                 color = self.calculateColorMap(dist)
-                cv2.circle(frame_debug, (int(imgpt[0]), int(imgpt[1])), int(20*self.font_scale), color, int(2*self.font_scale))
+                cv2.circle(frame_debug, (int(imgpt[0]), int(imgpt[1])), int(15*self.font_scale), color, int(2*self.font_scale))
 
         image_message = bridge.cv2_to_compressed_imgmsg(frame_debug)
         image_message.header.stamp = self.get_clock().now().to_msg()
@@ -314,14 +315,9 @@ class Mtofal(Node):
         depth_data = np.array(msg.zone_distance_mm)/1000.0
         depth_data = np.reshape(depth_data, (self.zone_res, self.zone_res))
 
-        # Flip and rotate
-        if(NEED_FLIP_HORIZONTAL):
-            depth_data = np.flip(depth_data, axis=1)
-        if(NEED_FLIP_VERTICAL):
-            depth_data = np.flip(depth_data, axis=0)
-
+        # Rotate
         for i in range(NEED_ROTATE):
-            depth_data = np.rot90(depth_data)
+            depth_data = np.rot90(depth_data, k=1)
 
         # Store 
         self.depth_data = depth_data
@@ -332,17 +328,32 @@ class Mtofal(Node):
         segmented, _ = vq(depth_data.flatten(), centroids)
         depth_segmented = np.reshape(segmented, (self.zone_res,self.zone_res))
         # Rearrage the index
-        if(centroids[0] > centroids[1]):
-            depth_segmented = depth_segmented<1
+        if(BOARD_OR_HOLE): # Use board mode
+            if(centroids[0] < centroids[1]):
+                depth_segmented = depth_segmented<1
+        else: # Use hole mode
+            if(centroids[0] > centroids[1]):
+                depth_segmented = depth_segmented<1
         # Find the hole center
         self.hole_time = msg.header.stamp.sec+(msg.header.stamp.nanosec*1e-9)
-        self.hole_center = (np.array(center_of_mass(depth_segmented))-(self.zone_res/2))*(PHI_WH/self.zone_res) # Result is in radians
+        hole_center = (np.array(center_of_mass(depth_segmented))-(self.zone_res/2))*(PHI_WH/self.zone_res) # Result is in radians
+        self.hole_center = np.array([hole_center[1], hole_center[0]]) # Swap row cols
 
         # Draw depth image
         for i in range(self.zone_res):
             for j in range(self.zone_res):
-                b,g,r = self.calculateColorMap(depth_data[i][j])
-                depth_img[int(j*depth_img_pixels):int((j*depth_img_pixels)+depth_img_pixels), int(i*depth_img_pixels):int((i*depth_img_pixels)+depth_img_pixels)] = (b, g, r)
+                xx = i
+                yy = j
+                b,g,r = self.calculateColorMap(depth_data[xx][yy])
+                px = int(yy*depth_img_pixels)
+                py = int(xx*depth_img_pixels)
+                cv2.rectangle(depth_img, 
+                    (px, py), 
+                    (px+depth_img_pixels, py+depth_img_pixels),
+                    (b,g,r),
+                    -1
+                )
+                cv2.putText(depth_img, str((xx*8)+yy), (px,py+int(depth_img_pixels/2)), 1, 2.0, (0,0,0), 2)
         
         # Draw debug lines during pitch/yaw calib
         if(self.hole_center is not None and not (math.isnan(self.hole_center[0]) or math.isnan(self.hole_center[1]))):
@@ -423,35 +434,33 @@ class Mtofal(Node):
         print(RotR.as_euler("xyz", degrees=True))
         
         # Plot raw data
-        fig, axs_raw = plt.subplots(3, 1)
-        axs_raw[0].plot(depth_vec_list[:,0], color=(1.0, 0.0, 0.0), label='MToF X')
-        axs_raw[0].plot(image_vec_list[:,0], color=(0.0, 1.0, 0.0), label='Image X')
+        fig, axs_raw = plt.subplots(2, 1)
+        fig.canvas.set_window_title('Uncalibrated Image Point')
+        axs_raw[0].set_title("Uncalibrated azimuth")
+        axs_raw[0].plot(depth_vec_list[:,0], color=(1.0, 0.0, 0.0), label='MToF [rad]')
+        axs_raw[0].plot(image_vec_list[:,0], color=(0.0, 1.0, 0.0), label='Image [rad]')
         axs_raw[0].legend(loc='best')
         axs_raw[0].grid()
-        axs_raw[1].plot(depth_vec_list[:,1], color=(1.0, 0.0, 0.0), label='MToF Y')
-        axs_raw[1].plot(image_vec_list[:,1], color=(0.0, 1.0, 0.0), label='Image Y')
+        axs_raw[1].set_title("Uncalibrated elevation")
+        axs_raw[1].plot(depth_vec_list[:,1], color=(1.0, 0.0, 0.0), label='MToF [rad]')
+        axs_raw[1].plot(image_vec_list[:,1], color=(0.0, 1.0, 0.0), label='Image [rad]')
         axs_raw[1].legend(loc='best')
         axs_raw[1].grid()
-        axs_raw[2].plot(depth_vec_list[:,2], color=(1.0, 0.0, 0.0), label='MToF Z')
-        axs_raw[2].plot(image_vec_list[:,2], color=(0.0, 1.0, 0.0), label='Image Z')
-        axs_raw[2].legend(loc='best')
-        axs_raw[2].grid()
 
         # Plot corrected Data
         depth_vec_res = RotR.apply(depth_vec_list)
-        fig, axs_res = plt.subplots(3, 1)
-        axs_res[0].plot(depth_vec_res[:,0], color=(1.0, 0.0, 0.0), label='MToF X')
-        axs_res[0].plot(image_vec_list[:,0], color=(0.0, 1.0, 0.0), label='Image x')
+        fig, axs_res = plt.subplots(2, 1)
+        fig.canvas.set_window_title('Calibrated Image Point')
+        axs_res[0].set_title("Calibrated azimuth")
+        axs_res[0].plot(depth_vec_res[:,0], color=(1.0, 0.0, 0.0), label='MToF [rad]')
+        axs_res[0].plot(image_vec_list[:,0], color=(0.0, 1.0, 0.0), label='Image [rad]')
         axs_res[0].legend(loc='best')
         axs_res[0].grid()
-        axs_res[1].plot(depth_vec_res[:,1], color=(1.0, 0.0, 0.0), label='MToF Y')
-        axs_res[1].plot(image_vec_list[:,1], color=(0.0, 1.0, 0.0), label='Image Y')
+        axs_res[1].set_title("Calibrated elevation")
+        axs_res[1].plot(depth_vec_res[:,1], color=(1.0, 0.0, 0.0), label='MToF [rad]')
+        axs_res[1].plot(image_vec_list[:,1], color=(0.0, 1.0, 0.0), label='Image [rad]')
         axs_res[1].legend(loc='best')
         axs_res[1].grid()
-        axs_res[2].plot(depth_vec_res[:,2], color=(1.0, 0.0, 0.0), label='MToF Z')
-        axs_res[2].plot(image_vec_list[:,2], color=(0.0, 1.0, 0.0), label='Image Z')
-        axs_res[2].legend(loc='best')
-        axs_res[2].grid()
 
         self.result_rvec = RotR.as_euler("xyz", degrees=False)
         self.calibration_done = True
@@ -464,7 +473,7 @@ class Mtofal(Node):
         print("Calibration completed! Otsukaresama desu!")
         print()
         print("Close the plots to continue...")
-        #plt.show()
+        plt.show()
         print("You can now view calibrated result image in /mtofal/debug/aruco/compressed")
         
 

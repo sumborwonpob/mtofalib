@@ -14,7 +14,7 @@
 
 using namespace std;
 // ::::::::::::::::::::: Parameters ::::::::::::::::::::::::
-char * DEVICE_PATH = "/dev/i2c-5";
+char * DEVICE_PATH = "/dev/i2c-3";
 auto MTOF_PIXEL_MODE = VL53L5CX_RESOLUTION_8X8; // Resolution VL53L5CX_RESOLUTION_8X8 or VL53L5CX_RESOLUTION_4X4
 int MTOF_FREQ = 30; // 8x8 Max 15 Hz, 4x4 Max 30 Hz
 

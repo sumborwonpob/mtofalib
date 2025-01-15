@@ -37,6 +37,7 @@ class WebcamPublisher(Node):
                  ret, frame = cap.read()
                  if frame is not None:
                     frame = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+                    frame = cv2.rotate(frame, cv2.ROTATE_180)
                     image_message = bridge.cv2_to_compressed_imgmsg(frame)
                     image_message.header.stamp = self.get_clock().now().to_msg()
                     image_message.header.frame_id = "camera_link"
