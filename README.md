@@ -28,6 +28,8 @@ Tested environment: Ubuntu 22.04, ROS 2 Humble Desktop, and OpenCV 4.5.4
 
 Tested sensors: VL53L5CX and VL53L8CX
 
+Tested camera: Omnivision OV2311 UVC camera with 1.6mm fisheye lens (roughly 150 degree HFoV)
+
 ## Usage
 
 
