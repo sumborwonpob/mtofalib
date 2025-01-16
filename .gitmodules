@@ -1,0 +1,3 @@
+[submodule "VL53L5CX_I2C_DRIVER"]
+	path = include/VL53L5CX_I2C_DRIVER
+	url = https://github.com/sumborwonpob/VL53L5CX_I2C_DRIVER.git
