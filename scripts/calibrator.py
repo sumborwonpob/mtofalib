@@ -62,7 +62,7 @@ MTOF_TOPIC = "/mtof/data"
 VIS_MAX_RANGE = 1.0 # Range in meters which will be in color blue
 VIS_MIN_RANGE = 0.1 # Range in meters which will be in Color red
 # ::::::::::::::::::::: Calib Params ::::::::::::
-NUM_DATA_POINTS = 600 # How many data should be collected for the calibration (recommeded more than 100 with sufficient movement)
+NUM_DATA_POINTS = 200 # How many data should be collected for the calibration (recommeded more than 100 with sufficient movement)
 # ::::::::::::::::::::: Put the dimension of your calibration target ::::::::::::
 ARUCO_DICT = cv2.aruco.DICT_APRILTAG_16h5 # Change according to your calib target
 # See repo readme for details, unit in meters
@@ -359,7 +359,8 @@ class Mtofal(Node):
         segmented, _ = vq(depth_data.flatten(), centroids)
         depth_segmented = np.reshape(segmented, (self.zone_res,self.zone_res))
         # Rearrage the index
-        depth_segmented = depth_segmented<1
+        if(centroids[0] < centroids[1]):
+            depth_segmented = depth_segmented<1
         # Find the hole center
         self.hole_time = msg.header.stamp.sec+(msg.header.stamp.nanosec*1e-9)
         hole_center = (np.array(center_of_mass(depth_segmented))-(self.zone_res/2))*(PHI_WH/self.zone_res) # Result is in radians
