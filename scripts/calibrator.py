@@ -9,6 +9,7 @@ import rclpy
 from rclpy.node import Node
 from rclpy import qos
 
+import time
 import math
 import numpy as np
 from scipy.ndimage import center_of_mass
@@ -55,7 +56,7 @@ NEED_ROTATE = 3 # 0 = No rotation, 1-3 integer for number of times to rotate CW
 # Target is to aim for the depth image to arrange from top-left to bottom-right, same as image pixel arrangement
 # ::::::::::::::::::::: ROS-related Params ::::::::::::::::::::::
 IMAGE_COMPRESSED = True
-IMAGE_TOPIC = "/vo/camera/compressed"
+IMAGE_TOPIC = "/camera/compressed"
 MTOF_TOPIC = "/mtof/data"
 # ::::::::::::::::::::: Visualization :::::::::::::::::::::
 # Depth TURBO color-map parameters
@@ -428,6 +429,10 @@ class Mtofal(Node):
     # ----------------- Function for calibration -----------------------------
     def calibrate_now(self):
         
+        import time
+
+        start_ts = time.time()
+
         # ================================================================
         # =================== 1st-pass calibration =======================
         # ================================================================
@@ -680,11 +685,12 @@ class Mtofal(Node):
         eval_err_zone_y = eval_err_y/zone_size_in_px
         print("    Done!")
 
+        # Your code here
+        end_ts = time.time()
+
         # Plot error distribution in the image
         fig, ax = plt.subplots(1,1)
-        scatter = plt.scatter(meas_img_pt[:,0], meas_img_pt[:,1], c=eval_err_xy, cmap='turbo', s=eval_err_xy/5)
-        plt.xlim(0, NEW_WIDTH)
-        plt.ylim(0, NEW_HEIGHT)
+        scatter = plt.scatter(meas_img_pt[:,0], meas_img_pt[:,1], c=eval_err_xy, cmap='turbo', s=eval_err_xy)
         plt.grid()
         plt.gca().invert_yaxis()
         ax.set_ylabel("board center in image y [pixel]")
@@ -740,6 +746,7 @@ class Mtofal(Node):
         axs_res[1].grid()
 
         print("----------- Calibration result -----------------")
+        print("  Calibration time: ", end_ts-start_ts, "seconds")
         print("  Roll offset: %.3f degrees"%(RotR.as_euler("xyz", degrees=True)[2]))
         print("  Pitch offset: %.3f degrees"%(RotR.as_euler("xyz", degrees=True)[0]))
         print("  Yaw offset: %.3f degrees"%(RotR.as_euler("xyz", degrees=True)[1]))
