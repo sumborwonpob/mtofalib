@@ -9,18 +9,12 @@ A low-cost multi-zone time-of-flight distance sensor, such as VL53L5CX or VL53L8
 
 Existing calibration methods for pattern-based depth cameras or time-of-flight depth cameras are not applicable for such a low resolution. An alternative approach is to use a second global shutter NIR/IR camera with high FPS to directly detect the mtof's emitted infrared light and find it's homography in the target camera. However, it requires an additional camera and also require additional extrinsic calibration between the targeted camera and the said camera. The position offset of the two cameras also results in some degree of 3D-2D coressondance error.
 
-This calibration method exploits a calibration target that can be easily replicate using basic materials such as cardboard boxes and a paper-printed AR markers. The relative orientation calibration is calculated from 3D-2D correspondence between the pose of the board center in the image estimated by AR markers and the pose of the board center estimated from depth data acquired from mtof. Relative orientation is solved with singular value decomposition (SVD) approach.
+This calibration method exploits a calibration target that can be easily replicate using basic materials such as paper-printed AR markers. The relative orientation calibration is calculated from 3D-2D correspondence between the pose of the board center in the image estimated by AR markers and the pose of the board center estimated from depth data acquired from mtof. Relative orientation is solved with singular value decomposition (SVD) approach.
 
 ## Calibration target
 
-The calibration pattern can be downloaded in [docs/calibration_pattern.pdf](https://github.com/sumborwonpob/mtofalib/blob/main/docs/calibration_pattern.pdf). The calibration target is a pattern of AR markers with a square hole in the middle.
+The calibration pattern can be downloaded in [docs/calibration_pattern.pdf](https://github.com/sumborwonpob/mtofalib/blob/main/docs/calibration_pattern.pdf).
 <img src="docs/calibration_pattern.png" />
-
-Calibration target can be used in two ways, depending on the hardware:
-
-* [Recommended] Board mode (with hole in the center covered): In case of wide FoV camera
-
-* Hollow mode (with hole in the center): In special circumstances such as extremely wide FoV camera.
 
 ## Tested Environment and dependencies
 
@@ -103,11 +97,7 @@ bash docker_inside_run_all.sh
 
 ## Calibration
 
-### Using board mode
-
-Generally, this mode is recomended.
-
-Use the rigid calibration board without the hollow part in the middle. Move the board around in the depth image in both up-down and left-right direction. 
+Move the board around in the depth image in both up-down and left-right direction. 
 
 Alternatively, fix the board on a thin base such that the base is not visible much in the depth image, and move the camera-mtof module around.
 
@@ -117,21 +107,7 @@ Alternatively, fix the board on a thin base such that the base is not visible mu
 
 <img src="docs/calib_board.gif" />
 
-Move the board sufficiently until enough samples are collected. The graph showing calibrated result will be shown at the end. You can see the actual calibrated projected depth after closing the graph.
-
-### Using hollow mode
-
-In special circumstances such as extremely wide FoV camera with low resolution such that AR marker detection is difficult at long range, hollow mode is recommanded.
-
-In this mode, calibration accuracy may be reduced.
-
-Use the calibration target with hole in the middle uncovered, move the board around in the depth image such that:
-* The whole hollow part is seen in the depth image.
-* Make sure to minimize the visibility of the area outside the border of the board.
-
-<img src="docs/calib_hollow.gif" />
-
-Move the board sufficiently until enough samples are collected. The graph showing calibrated result will be shown at the end. You can see the actual calibrated projected depth after closing the graph.
+Move the board sufficiently and slowly until enough samples are collected. The graph showing calibrated result will be shown at the end. You can see the actual calibrated projected depth after closing the graph.
 
 ## How to use the calib result?
 
